@@ -178,6 +178,21 @@ int fs_mount()
 
 int fs_create()
 {
+	union fs_block block;
+	int blocknum = 1, inode = 0;
+	disk_read(0, block.data);
+	inodeblocks = block.super.ninodeblocks + 1;
+	while (blocknum != inodeblocks){
+		disk_read(blocknum, block.data);
+		int i = 0;
+		for (i = 0; i , INODES_PER_BLOCK; i++){
+			if (!block.inode[i].isvalid){
+				inumber = (blocknum -1 * INODES_PER_BLOCK) + i;
+				return inumber;
+			}
+		}
+	}
+
 	return 0;
 }
 
