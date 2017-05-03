@@ -266,6 +266,17 @@ int fs_delete( int inumber )
 	}
 
 	disk_read(block.inode[inode].indirect, indirectblock.data);
+	for(i=POINTERS_PER_INODE; i < POINTERS_PER_BLOCK; i++)
+	{
+		printf("i is this %d\n",i);
+		printf("the indirect pointer is this %d\n", indirectblock.pointers[i-POINTERS_PER_INODE]);
+		fbb[indirectblock.pointers[i-POINTERS_PER_INODE]] = 0;
+		printf("the indirect pointer is this %d\n", indirectblock.pointers[i-POINTERS_PER_INODE]);
+	}
+
+
+	/*
+	disk_read(block.inode[inode].indirect, indirectblock.data);
 	fbb[block.inode[inode].indirect] = 0;
 	//free indirect block itself
 	
@@ -274,9 +285,9 @@ int fs_delete( int inumber )
 	{
 		fbb[indirectblock.pointers[i]] = 0;
 	}
+	*/
 
-
-	return 0;
+	return 1;
 }
 
 int fs_getsize( int inumber )
