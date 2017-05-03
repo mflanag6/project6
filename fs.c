@@ -181,13 +181,13 @@ int fs_create()
 	union fs_block block;
 	int blocknum = 1, inode = 0;
 	disk_read(0, block.data);
-	inodeblocks = block.super.ninodeblocks + 1;
+	int inodeblocks = block.super.ninodeblocks + 1;
 	while (blocknum != inodeblocks){
 		disk_read(blocknum, block.data);
 		int i = 0;
 		for (i = 0; i < INODES_PER_BLOCK; i++){
 			if (!block.inode[i].isvalid){
-				inumber = (blocknum -1 * INODES_PER_BLOCK) + i;
+				int inumber = (blocknum -1 * INODES_PER_BLOCK) + i;
 				return inumber;
 			}
 		}
@@ -253,6 +253,82 @@ int fs_getsize( int inumber )
 
 int fs_read( int inumber, char *data, int length, int offset )
 {
+	union fs_block inodeblock, datablock, indirectblock;
+	int iblock = inumber / INODES_PER_BLOCK + 1;
+	int inode = inumber % INODES_PER_BLOCK;
+	int i, blockremaining;
+	int blocksize = POINTERS_PER_BLOCK *4;	//4 byte pointers
+	disk_read(iblock, inodeblock.data);
+	char *garbage;
+	int bytesread = 0;
+
+	//initialize an array that could contain every block we need
+	int blockArray[POINTERS_PER_INODE + POINTERS_PER_BLOCK] = {0};
+	
+	//maybe we can take all the possible blocks
+	//and put them into an array to save some code reuse
+	for(i=0; i < POINTERS_PER_INODE; i++)
+	{
+		blockArray[i] = inodeblock.inode[inode].direct[i];
+		//load direct blocks into the array
+	}
+
+	disk_read(inodeblock.inode[inode].indirect, indirectblock.data);
+	for(i=POINTERS_PER_INODE; i < POINTERS_PER_BLOCK; i++)
+	{
+		blockArray[i] = indirectblock.pointers[i-POINTERS_PER_INODE];
+	}
+	
+	//check through array of block pointers
+	for(i=0; i < POINTERS_PER_INODE + POINTERS_PER_BLOCK; i++)
+	{
+		if(blockArray[i] == 0) continue;
+		//change these names later
+		disk_read(blockArray[i], datablock.data);
+		if(offset >= blocksize) 
+		{
+			offset -= blocksize;			
+			continue;
+		}
+		else if(offset > 0) 
+		{
+			memcpy(garbage, datablock.data, offset);
+			blockremaining = blocksize - offset;
+			offset -= offset;
+		}		
+
+		if(offset > 0)
+		{	//we're now past the offset
+			if(length == 0)
+				return bytesread;
+
+			if(length > blockremaining)
+			{
+				memcpy(data + bytesread, datablock.data, blockremaining);
+				length -= blockremaining;
+				bytesread += blockremaining;
+			}
+			else if(length <= blockremaining)
+			{
+				//this is the last part to copy
+				memcpy(data + bytesread, datablock.data, length);
+				bytesread += length;
+				return bytesread;
+			}
+			blockremaining = blocksize;
+		}
+	
+	}
+
+	//now do indirect
+	disk_read(inodeblock.inode[inode].indirect, indirectblock.data);
+	for(i=0; i < POINTERS_PER_BLOCK; i++)
+	{
+		disk_read(indirectblock.pointers[i], datablock.data);
+		
+	}
+
+
 	return 0;
 }
 
