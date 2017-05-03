@@ -40,6 +40,7 @@ int *fbb = NULL;
 //fbb[block] = 0  => block is free
 int nblocks, ninodes, ninodeblocks;
 int mounted = 0;
+int blocksize = 4096;
 
 int blockToInode(int blocknum, int inodenum)
 {
@@ -49,7 +50,7 @@ int blockToInode(int blocknum, int inodenum)
 int fs_format()
 {
 	//if(fs_mount())	//do not run on already mounted disk
-	if (!mounted)	
+	if (mounted)	
 		return 0;
 
 	int nblocks = disk_size();
@@ -319,7 +320,6 @@ int fs_read( int inumber, char *data, int length, int offset )
 	int inode = inumber % INODES_PER_BLOCK - 1;
 	printf("reading from block %d, array inode %d\n", iblock, inode);
 	int i, blockremaining;
-	int blocksize = POINTERS_PER_BLOCK *4;	//4 byte pointers
 	disk_read(iblock, inodeblock.data);
 	char *garbage;
 	int bytesread = 0;
@@ -408,9 +408,38 @@ int getFreeBlock() {
 	//no free blocks
 }
 
+int blockToWrite(int *offset, struct fs_inode inode)
+{
+	int counter;
+	while(*offset > blocksize)
+	{
+		counter++;
+		*offset -= blocksize;
+	}
+
+	if(counter < POINTERS_PER_INODE)
+	{
+		if(inode.direct[counter] != 0)
+			return inode.direct[counter];
+		else
+			return getFreeBlock();
+	}
+	else if(counter >= POINTERS_PER_INODE)
+	{
+		union fs_block block;
+		disk_read(inode.indirect, block.data);
+		if(block.pointers[counter-POINTERS_PER_INODE] != 0)
+			return block.pointers[counter-POINTERS_PER_INODE];
+		else
+			return getFreeBlock();
+	}
+
+}
+
 int fs_write( int inumber, const char *data, int length, int offset )
 {
 	printf("Attempting write\n");
+	printf("%s", data);
 	if(!mounted)
 	{
 		printf("Error: disk not mounted.  Run mount first\n");
@@ -420,10 +449,19 @@ int fs_write( int inumber, const char *data, int length, int offset )
 	union fs_block inodeblock, datablock, idblock;
 	int iblock = inumber / INODES_PER_BLOCK + 1;
 	int inode = inumber % INODES_PER_BLOCK -1;
-	int blocksize = 4096, byteswritten = 0, blockremaining;
+	int byteswritten = 0, blockremaining = 4096;
 	
 	disk_read(iblock, inodeblock.data);
 	printf("read inode block data\n");
+
+
+
+	/*blocknum = blockToWrite(&offset, inodeblock.inode[inode]);
+	blockremaining = blocksize - offset;
+	while(length > blocksize)
+	{
+		memcpy(
+	}*/
 
 
 	//direct first, maybe we adjust to do like read later
@@ -466,33 +504,42 @@ int fs_write( int inumber, const char *data, int length, int offset )
 
 		if(offset > blocksize)
 		{
+			printf("offset over a block\n");
 			offset -= blocksize;
 			continue;
 		}
 		else if(offset > 0)
 		{
-			memcpy(datablock.data, datablock.data, offset);
-			offset -= offset;
+			printf("offset less than a block, copying\n");
 			blockremaining = blocksize-offset;	
+			memcpy(datablock.data + offset, data, blockremaining);
+			offset -= offset;
+			byteswritten += blockremaining;
 		}
 
+		//printf("remaining offset is %d\n", offset);
+		blockremaining = blocksize;
 		if(offset <= 0)
 		{
 			if(length == 0)
+			{
+				printf("breaking\n");
 				break;
+			}
 
-			if(length > blockremaining)
+			/*if(length >= blockremaining)
 			{
 				memcpy(datablock.data + byteswritten, data, blockremaining);
 				length -= blockremaining;
 				byteswritten += blockremaining;
-			}
-			else if(length <= blockremaining)
+			}*/
+			else if(length < blockremaining)
 			{
+				printf("performing last copy\n");
 				//this is the last part to copy
-				memcpy(data + byteswritten, datablock.data, length);
+				memcpy(data + byteswritten, datablock.data + byteswritten, length);
 				printf(">>>>>");
-				printf("%s", datablock.data);
+				printf("%s", data);
 				printf("<<<<<<\n");
 				byteswritten += length;
 				disk_write(iblock, inodeblock.data);
