@@ -44,7 +44,7 @@ int blocksize = 4096;
 
 int blockToInode(int blocknum, int inodenum)
 {
-	return ((blocknum -1) * INODES_PER_BLOCK) + inodenum + 1;
+	return ((blocknum -1) * INODES_PER_BLOCK) + inodenum;
 }
 
 int fs_format()
@@ -120,7 +120,7 @@ void fs_debug()
 			//if (block.inode[i].size == 0) continue;
 			if (block.inode[i].isvalid == 0) continue;
 
-			printf("inode %d\n", blockToInode(n, i));
+			printf("inode %d:\n", blockToInode(n, i));
 			printf("    size: %d bytes\n", block.inode[i].size);
 			printf("    direct blocks: ");
 
