@@ -158,7 +158,7 @@ int fs_mount()
 		for(n = n; n < block.super.nblocks; n++)
 			fbb[n] = 0;		//mark data blocks as unused to start 
 	}
-	else return 0;	//something failed probabaly
+	else return 0;	//something failed 
 	
 	int i, j, k;
 	for (i = 1; i <= ninodeblocks; i++)
@@ -169,9 +169,6 @@ int fs_mount()
 			if (block.inode[j].isvalid == 0) continue;
 			if (block.inode[j].indirect != 0)
 				fbb[block.inode[j].indirect] = 1;
-			//do we need to set all the blocks indirect
-										//points to as used?	
-										//later
 
 			for (k = 0; k < POINTERS_PER_INODE; k++)
 			{
@@ -180,6 +177,17 @@ int fs_mount()
 			}
 		
 		}
+	}
+
+	//this will hopefully set all indirect pointers to 0
+	for(i=ninodeblocks+1; i<nblocks; i++)
+	{
+		disk_read(i, block.data);
+		for(j=0; j<POINTERS_PER_BLOCK; j++)
+		{
+			block.pointers[j] = 0;
+		}
+			
 	}
 	
 	mounted = 1;
@@ -483,6 +491,9 @@ int fs_write( int inumber, const char *data, int length, int offset )
 			{
 				//this is the last part to copy
 				memcpy(data + byteswritten, datablock.data, length);
+				printf(">>>>>");
+				printf("%s", datablock.data);
+				printf("<<<<<<\n");
 				byteswritten += length;
 				disk_write(iblock, inodeblock.data);
 				if (id != -1)
