@@ -185,7 +185,7 @@ int fs_create()
 	while (blocknum != inodeblocks){
 		disk_read(blocknum, block.data);
 		int i = 0;
-		for (i = 0; i , INODES_PER_BLOCK; i++){
+		for (i = 0; i < INODES_PER_BLOCK; i++){
 			if (!block.inode[i].isvalid){
 				inumber = (blocknum -1 * INODES_PER_BLOCK) + i;
 				return inumber;
