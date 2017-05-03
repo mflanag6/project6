@@ -41,6 +41,11 @@ int *fbb = NULL;
 int nblocks, ninodes, ninodeblocks;
 int mounted = 0;
 
+int blockToInode(int blocknum, int inodenum)
+{
+	return ((blocknum -1) * INODES_PER_BLOCK) + inodenum + 1;
+}
+
 int fs_format()
 {
 	//if(fs_mount())	//do not run on already mounted disk
@@ -106,15 +111,15 @@ void fs_debug()
 	for (n = 1; n <= ninodeblocks; n++)	//start at 1, 0 is done above
 	{
 		disk_read(n, block.data); 
-		printf("block: %d\n", n);
+		//printf("block: %d\n", n);
 
 		for (i = 0; i < INODES_PER_BLOCK; i++) 
 		{
 			//skip if inode is empty or invalid
-			if (block.inode[i].size == 0) continue;
+			//if (block.inode[i].size == 0) continue;
 			if (block.inode[i].isvalid == 0) continue;
 
-			printf("inode %d\n", i);
+			printf("inode %d\n", blockToInode(n, i));
 			printf("    size: %d bytes\n", block.inode[i].size);
 			printf("    direct blocks: ");
 
@@ -148,7 +153,7 @@ int fs_mount()
 	{
 		fbb = temp;
 		fbb[0] = 1; //superblock is in use
-		for(n = 1; n < ninodeblocks; n++)
+		for(n = 1; n <= ninodeblocks; n++)
 			fbb[n] = 1; 	//inode blocks are in use
 		for(n = n; n < block.super.nblocks; n++)
 			fbb[n] = 0;		//mark data blocks as unused to start 
@@ -156,7 +161,7 @@ int fs_mount()
 	else return 0;	//something failed probabaly
 	
 	int i, j, k;
-	for (i = 1; i < ninodeblocks; i++)
+	for (i = 1; i <= ninodeblocks; i++)
 	{
 		disk_read(i, block.data);
 		for (j = 0; j < INODES_PER_BLOCK; j++)
@@ -165,7 +170,8 @@ int fs_mount()
 			if (block.inode[j].indirect != 0)
 				fbb[block.inode[j].indirect] = 1;
 			//do we need to set all the blocks indirect
-										//points to as used?
+										//points to as used?	
+										//later
 
 			for (k = 0; k < POINTERS_PER_INODE; k++)
 			{
@@ -178,6 +184,11 @@ int fs_mount()
 	
 	mounted = 1;
 
+	printf("free block bitmap is as follows:\n");
+	for(i=0; i <nblocks; i++)
+		printf("%d ", fbb[i]);
+
+	printf("\n");
 	return 1;
 }
 
@@ -297,7 +308,8 @@ int fs_read( int inumber, char *data, int length, int offset )
 
 	union fs_block inodeblock, datablock, indirectblock;
 	int iblock = inumber / INODES_PER_BLOCK + 1;
-	int inode = inumber % INODES_PER_BLOCK;
+	int inode = inumber % INODES_PER_BLOCK - 1;
+	printf("reading from block %d, array inode %d\n", iblock, inode);
 	int i, blockremaining;
 	int blocksize = POINTERS_PER_BLOCK *4;	//4 byte pointers
 	disk_read(iblock, inodeblock.data);
@@ -343,7 +355,9 @@ int fs_read( int inumber, char *data, int length, int offset )
 		if(offset <= 0)
 		{	//we're now past the offset
 			if(length == 0)
+			{
 				return bytesread;
+			}
 
 			if(length > blockremaining)
 			{
@@ -377,7 +391,7 @@ int fs_read( int inumber, char *data, int length, int offset )
 
 int getFreeBlock() {
 	int i;
-	for(i=0; i < nblocks; i++)
+	for(i=1; i < nblocks; i++)
 	{
 		if(fbb[i] == 0)
 			return i;
@@ -397,7 +411,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 
 	union fs_block inodeblock, datablock, idblock;
 	int iblock = inumber / INODES_PER_BLOCK + 1;
-	int inode = inumber % INODES_PER_BLOCK;
+	int inode = inumber % INODES_PER_BLOCK -1;
 	int blocksize = 4096, byteswritten = 0, blockremaining;
 	
 	disk_read(iblock, inodeblock.data);
@@ -474,6 +488,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 				if (id != -1)
 					disk_write(id, idblock.data);
 				disk_write(blocknum, datablock.data);
+				printf("writing out to block %d\n", blocknum);
 				return byteswritten;
 			}
 			blockremaining = blocksize;
@@ -486,6 +501,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 	if(id != -1)
 		disk_write(id, idblock.data);
 	disk_write(blocknum, datablock.data);
+	printf("writing out to block %d\n", blocknum);
 	return byteswritten;
 
 	//return 0;
