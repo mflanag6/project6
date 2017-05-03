@@ -192,16 +192,30 @@ int fs_create()
 	union fs_block block;
 	int blocknum = 1, inode = 0;
 	disk_read(0, block.data);
+	printf("\n\n");
+	printf("Disk has been read.\n");
 	int inodeblocks = block.super.ninodeblocks + 1;
+	printf("Number of inodeblocks is %d.\n", inodeblocks);
 	while (blocknum != inodeblocks){
+		printf("Number of blocknum %d.\n", blocknum);
 		disk_read(blocknum, block.data);
 		int i = 0;
 		for (i = 0; i < INODES_PER_BLOCK; i++){
+			printf("We are on inode %d \n", i);
 			if (!block.inode[i].isvalid){
-				int inumber = (blocknum -1 * INODES_PER_BLOCK) + i;
+				printf("Number of blocknum again is %d.\n", blocknum);
+				int inumber = ((blocknum -1) * INODES_PER_BLOCK) + i + 1;
+				block.inode[i].size = 0;
+				memset(block.inode[i].direct, 0, sizeof block.inode[i].direct);
+				block.inode[i].isvalid = 1;
+				block.inode[i].indirect = 0;
+				printf("Inode %d is not valid and thus free.\n", i);
+				printf("inumber is %d.\n", inumber);
+				disk_write(blocknum, block.data);
 				return inumber;
 			}
 		}
+		blocknum++;
 	}
 
 	return 0;
