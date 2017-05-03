@@ -183,6 +183,34 @@ int fs_create()
 
 int fs_delete( int inumber )
 {
+	//we should really make the superblock data global
+	//this will cut down on reads
+	union fs_block block, indirectblock;
+	//disk_read(0, block.data);
+
+	//add 1 b/c 0 is superblock, inodes start at 1
+	int blocknum = inumber/INODES_PER_BLOCK + 1;
+	int inode = inumber % INODES_PER_BLOCK;
+
+	disk_read(blocknum, block.data);
+	int i;
+	for(i=0; i<POINTERS_PER_INODE; i++)
+	{
+		fbb[block.inode[inode].direct[i]] = 0;
+		//mark this block as free
+	}
+
+	disk_read(block.inode[inode].indirect, indirectblock.data);
+	fbb[block.inode[inode].indirect] = 0;
+	//free indirect block itself
+	
+	//mark all the blocks it pointed to as free
+	for(i = 0; i < POINTERS_PER_BLOCK; i++)
+	{
+		fbb[indirectblock.pointers[i]] = 0;
+	}
+
+
 	return 0;
 }
 
@@ -194,7 +222,7 @@ int fs_getsize( int inumber )
 	disk_read(0,block.data);
 
 	int blocknum = inumber/INODES_PER_BLOCK + 1;
-	int inode = INODES_PER_BLOCK % inumber;
+	int inode = inumber % INODES_PER_BLOCK;// % inumber;
 	
 	disk_read(blocknum, block.data);
 	printf("Size: \n");
