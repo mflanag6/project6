@@ -311,7 +311,7 @@ int fs_read( int inumber, char *data, int length, int offset )
 	for(i=0; i < POINTERS_PER_INODE + POINTERS_PER_BLOCK; i++)
 	{
 		if(blockArray[i] <= 0) continue;
-		if(i > nblocks) return bytesread;
+		if(i >= nblocks) return bytesread;
 		//change these names later
 		disk_read(blockArray[i], datablock.data);
 		if(offset >= blocksize) 
@@ -374,6 +374,7 @@ int getFreeBlock() {
 
 int fs_write( int inumber, const char *data, int length, int offset )
 {
+	printf("Attempting write\n");
 	if(!mounted)
 	{
 		printf("Error: disk not mounted.  Run mount first\n");
@@ -386,10 +387,11 @@ int fs_write( int inumber, const char *data, int length, int offset )
 	int blocksize = 4096, byteswritten = 0, blockremaining;
 	
 	disk_read(iblock, inodeblock.data);
+	printf("read inode block data\n");
 
 
 	//direct first, maybe we adjust to do like read later
-	int i, blocknum;
+	int i, blocknum, id = -1;
 	for(i=0; i < POINTERS_PER_INODE + POINTERS_PER_BLOCK; i++)
 	{
 		if(i < POINTERS_PER_INODE)
@@ -397,14 +399,16 @@ int fs_write( int inumber, const char *data, int length, int offset )
 			//direct blocks
 			//if there's no block in place, we need to allocate one
 			blocknum = inodeblock.inode[inode].direct[i];
+			printf("found direct block %d in place\n", blocknum);
 		}
 		else
 		{
 			//indirect block
 			if(inodeblock.inode[inode].indirect == 0)
 			{
-				int id = getFreeBlock();
-				inodeblock.inode[inode].indirect = id;	
+				id = getFreeBlock();
+				inodeblock.inode[inode].indirect = id;
+				printf("found indirect block to allocate %d\n", id);
 			}
 			disk_read(inodeblock.inode[inode].indirect, idblock.data);
 			blocknum = idblock.pointers[i-POINTERS_PER_INODE];
@@ -412,6 +416,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 		if(blocknum == 0)
 		{
 			blocknum = getFreeBlock();
+			printf("found direct block to allocate %d\n", blocknum);
 			if(blocknum == -1)
 			{
 				printf("Error: No free blocks found\n");
@@ -421,6 +426,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 				inodeblock.inode[inode].direct[i] = blocknum;
 		}
 		disk_read(blocknum, datablock.data);
+		printf("read from block %d\n", blocknum);
 
 		if(offset > blocksize)
 		{
@@ -437,7 +443,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 		if(offset <= 0)
 		{
 			if(length == 0)
-				return byteswritten;
+				break;
 
 			if(length > blockremaining)
 			{
@@ -450,13 +456,23 @@ int fs_write( int inumber, const char *data, int length, int offset )
 				//this is the last part to copy
 				memcpy(data + byteswritten, datablock.data, length);
 				byteswritten += length;
+				disk_write(iblock, inodeblock.data);
+				if (id != -1)
+					disk_write(id, idblock.data);
+				disk_write(blocknum, datablock.data);
 				return byteswritten;
 			}
 			blockremaining = blocksize;
 		}
-		
+		disk_write(blocknum, datablock.data);
+		printf("writing out to block %d\n", blocknum);
 	}
 
+	disk_write(iblock, inodeblock.data);
+	if(id != -1)
+		disk_write(id, idblock.data);
+	disk_write(blocknum, datablock.data);
+	return byteswritten;
 
-	return 0;
+	//return 0;
 }
