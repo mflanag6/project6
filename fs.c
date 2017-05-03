@@ -44,7 +44,7 @@ int blocksize = 4096;
 
 int blockToInode(int blocknum, int inodenum)
 {
-	return ((blocknum -1) * INODES_PER_BLOCK) + inodenum;
+	return ((blocknum -1) * INODES_PER_BLOCK) + inodenum + 1;
 }
 
 int fs_format()
@@ -90,7 +90,7 @@ int fs_format()
 
 void fs_debug()
 {
-	union fs_block block;
+	union fs_block block, idblock;
 	//struct fs_inode inode;
 
 	disk_read(0,block.data);
@@ -100,7 +100,7 @@ void fs_debug()
 	printf("    %d inode blocks\n",block.super.ninodeblocks);
 	printf("    %d inodes\n",block.super.ninodes);
 
-	int n = 0;//, nblocks = block.super.nblocks;
+	int n = 0, nblocks = block.super.nblocks;
 	//int ninodes = block.super.ninodes;
 	int ninodeblocks = block.super.ninodeblocks;
 
@@ -108,7 +108,7 @@ void fs_debug()
 	
 	//maybe also read the indirect block to get the data
 		//that it points to
-	int i, j;
+	int i, j, k;
 	for (n = 1; n <= ninodeblocks; n++)	//start at 1, 0 is done above
 	{
 		disk_read(n, block.data); 
@@ -131,7 +131,19 @@ void fs_debug()
 			}
 			printf("\n");
 			if (block.inode[i].indirect != 0)
+			{
 				printf("    indirect block: %d\n", block.inode[i].indirect);
+				printf("    indirect data blocks: ");
+				disk_read(block.inode[i].indirect, idblock.data);
+				for(k=0; k < POINTERS_PER_BLOCK; k++)
+				{
+					if(idblock.pointers[k] > 0 && idblock.pointers[k] < nblocks)
+					{
+						printf("%d ", idblock.pointers[k]);
+					}
+				}
+				printf("\n");
+			}
 				
 		}
 	}
@@ -258,6 +270,14 @@ int fs_delete( int inumber )
 
 	disk_read(blocknum, block.data);
 	int i;
+
+	//do not run if inode is invalid
+	if(block.inode[inode].isvalid == 0)
+	{
+		printf("Error: inode is invalid\n");
+		return 0;
+	}
+
 	for(i=0; i<POINTERS_PER_INODE; i++)
 	{
 		fbb[block.inode[inode].direct[i]] = 0;
