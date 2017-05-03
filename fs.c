@@ -38,11 +38,13 @@ int *fbb = NULL;
 //free block bitmap, 
 //fbb[block] = 1  => block is in use
 //fbb[block] = 0  => block is free
+int nblocks, ninodes, ninodeblocks;
+int mounted = 0;
 
 int fs_format()
 {
 	//if(fs_mount())	//do not run on already mounted disk
-	if (fbb != NULL)	
+	if (!mounted)	
 		return 0;
 
 	int nblocks = disk_size();
@@ -139,7 +141,9 @@ int fs_mount()
 
 	int n;
 	int *temp = (int*) realloc (fbb, block.super.nblocks);
-	int ninodeblocks = block.super.ninodeblocks;
+	ninodeblocks = block.super.ninodeblocks;
+	nblocks = block.super.nblocks;
+	ninodes = block.super.ninodes;
 	if (temp != NULL)
 	{
 		fbb = temp;
@@ -172,12 +176,19 @@ int fs_mount()
 		}
 	}
 	
+	mounted = 1;
 
 	return 1;
 }
 
 int fs_create()
 {
+	if(!mounted)
+	{
+		printf("Error: disk not mounted.  Run mount first\n");
+		return 0;
+	}
+
 	union fs_block block;
 	int blocknum = 1, inode = 0;
 	disk_read(0, block.data);
@@ -198,6 +209,11 @@ int fs_create()
 
 int fs_delete( int inumber )
 {
+	if(!mounted)
+	{
+		printf("Error: disk not mounted.  Run mount first\n");
+		return 0;
+	}
 	//we should really make the superblock data global
 	//this will cut down on reads
 	union fs_block block, indirectblock;
@@ -231,6 +247,12 @@ int fs_delete( int inumber )
 
 int fs_getsize( int inumber )
 {
+	if(!mounted)
+	{
+		printf("Error: disk not mounted.  Run mount first\n");
+		return -1;
+	}
+
 	union fs_block block;
 	//struct fs_inode inode;
 
@@ -253,6 +275,12 @@ int fs_getsize( int inumber )
 
 int fs_read( int inumber, char *data, int length, int offset )
 {
+	if(!mounted)
+	{
+		printf("Error: disk not mounted.  Run mount first\n");
+		return 0;
+	}
+
 	union fs_block inodeblock, datablock, indirectblock;
 	int iblock = inumber / INODES_PER_BLOCK + 1;
 	int inode = inumber % INODES_PER_BLOCK;
@@ -282,7 +310,8 @@ int fs_read( int inumber, char *data, int length, int offset )
 	//check through array of block pointers
 	for(i=0; i < POINTERS_PER_INODE + POINTERS_PER_BLOCK; i++)
 	{
-		if(blockArray[i] == 0) continue;
+		if(blockArray[i] <= 0) continue;
+		if(i > nblocks) return bytesread;
 		//change these names later
 		disk_read(blockArray[i], datablock.data);
 		if(offset >= blocksize) 
@@ -297,7 +326,7 @@ int fs_read( int inumber, char *data, int length, int offset )
 			offset -= offset;
 		}		
 
-		if(offset > 0)
+		if(offset <= 0)
 		{	//we're now past the offset
 			if(length == 0)
 				return bytesread;
@@ -321,18 +350,113 @@ int fs_read( int inumber, char *data, int length, int offset )
 	}
 
 	//now do indirect
-	disk_read(inodeblock.inode[inode].indirect, indirectblock.data);
+	/*disk_read(inodeblock.inode[inode].indirect, indirectblock.data);
 	for(i=0; i < POINTERS_PER_BLOCK; i++)
 	{
 		disk_read(indirectblock.pointers[i], datablock.data);
 		
-	}
+	}*/
 
 
 	return 0;
 }
 
+int getFreeBlock() {
+	int i;
+	for(i=0; i < nblocks; i++)
+	{
+		if(fbb[i] == 0)
+			return i;
+	}
+	return -1;
+	//no free blocks
+}
+
 int fs_write( int inumber, const char *data, int length, int offset )
 {
+	if(!mounted)
+	{
+		printf("Error: disk not mounted.  Run mount first\n");
+		return 0;
+	}
+
+	union fs_block inodeblock, datablock, idblock;
+	int iblock = inumber / INODES_PER_BLOCK + 1;
+	int inode = inumber % INODES_PER_BLOCK;
+	int blocksize = 4096, byteswritten = 0, blockremaining;
+	
+	disk_read(iblock, inodeblock.data);
+
+
+	//direct first, maybe we adjust to do like read later
+	int i, blocknum;
+	for(i=0; i < POINTERS_PER_INODE + POINTERS_PER_BLOCK; i++)
+	{
+		if(i < POINTERS_PER_INODE)
+		{
+			//direct blocks
+			//if there's no block in place, we need to allocate one
+			blocknum = inodeblock.inode[inode].direct[i];
+		}
+		else
+		{
+			//indirect block
+			if(inodeblock.inode[inode].indirect == 0)
+			{
+				int id = getFreeBlock();
+				inodeblock.inode[inode].indirect = id;	
+			}
+			disk_read(inodeblock.inode[inode].indirect, idblock.data);
+			blocknum = idblock.pointers[i-POINTERS_PER_INODE];
+		}
+		if(blocknum == 0)
+		{
+			blocknum = getFreeBlock();
+			if(blocknum == -1)
+			{
+				printf("Error: No free blocks found\n");
+				return 0;
+			}
+			if(i < POINTERS_PER_INODE)
+				inodeblock.inode[inode].direct[i] = blocknum;
+		}
+		disk_read(blocknum, datablock.data);
+
+		if(offset > blocksize)
+		{
+			offset -= blocksize;
+			continue;
+		}
+		else if(offset > 0)
+		{
+			memcpy(datablock.data, datablock.data, offset);
+			offset -= offset;
+			blockremaining = blocksize-offset;	
+		}
+
+		if(offset <= 0)
+		{
+			if(length == 0)
+				return byteswritten;
+
+			if(length > blockremaining)
+			{
+				memcpy(datablock.data + byteswritten, data, blockremaining);
+				length -= blockremaining;
+				byteswritten += blockremaining;
+			}
+			else if(length <= blockremaining)
+			{
+				//this is the last part to copy
+				memcpy(data + byteswritten, datablock.data, length);
+				byteswritten += length;
+				return byteswritten;
+			}
+			blockremaining = blocksize;
+		}
+		
+	}
+
+
 	return 0;
 }
