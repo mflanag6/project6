@@ -120,7 +120,7 @@ void fs_debug()
 			//if (block.inode[i].size == 0) continue;
 			if(block.inode[i].isvalid == 0) continue;
 
-			printf("inode %d:\n", i);//blockToInode(n, i));
+			printf("inode %d:\n", blockToInode(n, i));
 			printf("    size: %d bytes\n", block.inode[i].size);
 			printf("    direct blocks: ");
 
@@ -280,11 +280,13 @@ int fs_delete( int inumber )
 			}
 			printf("the indirect pointer is this %d\n", indirectblock.pointers[i]);
 		}
+		disk_write(block.inode[inode].indirect, indirectblock.data);
 	}
 
 	//all the blocks are freed, mark this inode as invalid
 	printf("marking number %d as invalid\n", inode);
 	block.inode[inode].isvalid = 0;
+	disk_write(blocknum, block.data);
 
 
 	/*
