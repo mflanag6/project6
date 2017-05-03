@@ -211,6 +211,7 @@ int fs_create()
 				block.inode[i].indirect = 0;
 				printf("Inode %d is not valid and thus free.\n", i);
 				printf("inumber is %d.\n", inumber);
+				disk_write(blocknum, block.data);
 				return inumber;
 			}
 		}
