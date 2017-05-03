@@ -118,7 +118,7 @@ void fs_debug()
 		{
 			//skip if inode is empty or invalid
 			//if (block.inode[i].size == 0) continue;
-			if (block.inode[i].isvalid == 0) continue;
+			if(block.inode[i].isvalid == 0) continue;
 
 			printf("inode %d:\n", i);//blockToInode(n, i));
 			printf("    size: %d bytes\n", block.inode[i].size);
@@ -248,8 +248,7 @@ int fs_delete( int inumber )
 		printf("Error: disk not mounted.  Run mount first\n");
 		return 0;
 	}
-	//we should really make the superblock data global
-	//this will cut down on reads
+
 	union fs_block block, indirectblock;
 	//disk_read(0, block.data);
 
@@ -265,14 +264,27 @@ int fs_delete( int inumber )
 		//mark this block as free
 	}
 
-	disk_read(block.inode[inode].indirect, indirectblock.data);
-	for(i=POINTERS_PER_INODE; i < POINTERS_PER_BLOCK; i++)
+	//if this inode used indirect block, we need to clear it
+	if(block.inode[inode].indirect != 0)
 	{
-		printf("i is this %d\n",i);
-		printf("the indirect pointer is this %d\n", indirectblock.pointers[i-POINTERS_PER_INODE]);
-		fbb[indirectblock.pointers[i-POINTERS_PER_INODE]] = 0;
-		printf("the indirect pointer is this %d\n", indirectblock.pointers[i-POINTERS_PER_INODE]);
+		disk_read(block.inode[inode].indirect, indirectblock.data);
+		for(i=0; i < POINTERS_PER_BLOCK; i++)
+		{
+			printf("i is this %d\n",i);
+			printf("the indirect pointer is this %d\n", indirectblock.pointers[i]);
+			if(indirectblock.pointers[i] > 0+ninodeblocks && indirectblock.pointers[i] < nblocks)
+			{
+				//only clear it if it was a valid pointer
+				//don't worry about garbage values
+				fbb[indirectblock.pointers[i]] = 0;
+			}
+			printf("the indirect pointer is this %d\n", indirectblock.pointers[i]);
+		}
 	}
+
+	//all the blocks are freed, mark this inode as invalid
+	printf("marking number %d as invalid\n", inode);
+	block.inode[inode].isvalid = 0;
 
 
 	/*
