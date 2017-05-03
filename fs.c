@@ -78,7 +78,7 @@ void fs_debug()
 	int nblocks = block.super.nblocks, n = 0;
 	int ninodes = block.super.ninodes;
 
-	printf("num blocks is %d\n", nblocks);
+	//printf("num blocks is %d\n", nblocks);
 	
 	//maybe also read the indirect block to get the data
 		//that it points to
@@ -129,6 +129,28 @@ int fs_delete( int inumber )
 
 int fs_getsize( int inumber )
 {
+	union fs_block block;
+	//struct fs_inode inode;
+
+	disk_read(0,block.data);
+
+	printf("superblock:\n");
+	printf("    %d blocks\n",block.super.nblocks);
+	printf("    %d inode blocks\n",block.super.ninodeblocks);
+	printf("    %d inodes\n",block.super.ninodes);
+
+	int blocknum = inumber/INODES_PER_BLOCK + 1;
+	int inode = INODES_PER_BLOCK % inumber;
+	
+	disk_read(blocknum, block.data);
+	printf("Size: \n");
+	printf("    %d bytes\n", block.inode[inode].size);
+	return block.inode[inode].size;
+
+	//maybe also read the indirect block to get the data
+		//that it points to
+
+	
 	return -1;
 }
 
